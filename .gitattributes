@@ -1,0 +1,12 @@
+Resources/douyin_700x1240.mp4 filter=lfs diff=lfs merge=lfs -text
+Resources/jieqian_720x1280.mp4 filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/lame/lib/libmp3lame.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/libyuv/lib/libyuv.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/sox/lib/libsox.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/fdkaac/lib/libfdk-aac.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/ffmpeg/lib/libavcodec.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/ffmpeg/lib/libavformat.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/ffmpeg/lib/libavutil.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/ffmpeg/lib/libswscale.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/ffmpeg/lib/libswresample.a filter=lfs diff=lfs merge=lfs -text
+3rdparty/iOS/x264/lib/libx264.a filter=lfs diff=lfs merge=lfs -text
