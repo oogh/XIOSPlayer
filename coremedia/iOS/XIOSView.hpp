@@ -1,30 +1,27 @@
 //
 //  XIOSView.hpp
-//  XRender
+//  XIOSPlayer
 //
-//  Created by Oogh on 2020/04/17.
-//  Copyright © 2020 Oogh. All rights reserved.
+//  Created by Andy on 2021/1/14.
 //
 
-#ifndef XIOSView_hpp
-#define XIOSView_hpp
+#ifndef XIOSView_h
+#define XIOSView_h
 
 #import <UIKit/UIKit.h>
-
-typedef void (^OnProgressChangeCallback)(long current, long duration);
+#import <OpenGLES/ES2/gl.h>
+#import <OpenGLES/ES2/glext.h>
 
 @interface XIOSView : UIView
 
-@property (nonatomic, copy) OnProgressChangeCallback progressChangeCallback;
+@property GLfloat preferredRotation;
+@property CGSize presentationRect;
+@property GLfloat chromaThreshold;
+@property GLfloat lumaThreshold;
 
-- (void)start;
-
-- (void)seekTo:(long)targetPos;
-
-- (void)pause;
-
-- (void)stop;
+- (void)setupGL;
+- (void)displayPixelBuffer:(CVPixelBufferRef)pixelBuffer;
 
 @end
 
-#endif /* XIOSView_hpp */
+#endif /* XIOSView_h */

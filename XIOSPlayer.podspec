@@ -25,7 +25,7 @@ Pod::Spec.new do |spec|
     coremedia.source_files  = "coremedia/**/*.{h,hpp,cpp}"
     coremedia.exclude_files = "coremedia/Android", "coremedia/Mac"
     coremedia.public_header_files = "coremedia/**/*.{h,hpp}"
-    coremedia.frameworks = "GLKit", "VideoToolBox", "CoreMedia", "OpenGLES", "OpenAL", "AVFoundation"
+    coremedia.frameworks = "GLKit", "VideoToolBox", "CoreMedia", "OpenGLES", "OpenAL", "AVFoundation", "QuartzCore"
     coremedia.libraries = "c++", "iconv"
     
     coremedia.subspec 'iOS' do |iOS|
