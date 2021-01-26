@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		13CDD08CF36FB9FDE5C6969C /* libPods-XIOSPlayer.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1A031637C4AB55991BBA9892 /* libPods-XIOSPlayer.a */; };
+		A135663625B2A9790090D017 /* Shader.fsh in Resources */ = {isa = PBXBuildFile; fileRef = A135663425B2A9790090D017 /* Shader.fsh */; };
+		A135663725B2A9790090D017 /* Shader.vsh in Resources */ = {isa = PBXBuildFile; fileRef = A135663525B2A9790090D017 /* Shader.vsh */; };
+		A135663A25B2AAB20090D017 /* douyin_700x1240.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = A135663925B2AAB20090D017 /* douyin_700x1240.mp4 */; };
 		A153F61525B037A3009E9AC0 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = A153F61425B037A3009E9AC0 /* AppDelegate.m */; };
 		A153F61825B037A3009E9AC0 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = A153F61725B037A3009E9AC0 /* SceneDelegate.m */; };
 		A153F61B25B037A3009E9AC0 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = A153F61A25B037A3009E9AC0 /* ViewController.m */; };
@@ -21,6 +24,9 @@
 		04EB50B14995CA96B98A2864 /* Pods-XIOSPlayer.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-XIOSPlayer.debug.xcconfig"; path = "Target Support Files/Pods-XIOSPlayer/Pods-XIOSPlayer.debug.xcconfig"; sourceTree = "<group>"; };
 		1A031637C4AB55991BBA9892 /* libPods-XIOSPlayer.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-XIOSPlayer.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6856BC9C712C1958CCA19DD2 /* Pods-XIOSPlayer.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-XIOSPlayer.release.xcconfig"; path = "Target Support Files/Pods-XIOSPlayer/Pods-XIOSPlayer.release.xcconfig"; sourceTree = "<group>"; };
+		A135663425B2A9790090D017 /* Shader.fsh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Shader.fsh; sourceTree = "<group>"; };
+		A135663525B2A9790090D017 /* Shader.vsh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.glsl; path = Shader.vsh; sourceTree = "<group>"; };
+		A135663925B2AAB20090D017 /* douyin_700x1240.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = douyin_700x1240.mp4; sourceTree = "<group>"; };
 		A153F61025B037A3009E9AC0 /* XIOSPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = XIOSPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A153F61325B037A3009E9AC0 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		A153F61425B037A3009E9AC0 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -53,8 +59,16 @@
 				04EB50B14995CA96B98A2864 /* Pods-XIOSPlayer.debug.xcconfig */,
 				6856BC9C712C1958CCA19DD2 /* Pods-XIOSPlayer.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		A135663325B2A9790090D017 /* Shaders */ = {
+			isa = PBXGroup;
+			children = (
+				A135663425B2A9790090D017 /* Shader.fsh */,
+				A135663525B2A9790090D017 /* Shader.vsh */,
+			);
+			path = Shaders;
 			sourceTree = "<group>";
 		};
 		A153F60725B037A2009E9AC0 = {
@@ -78,6 +92,8 @@
 		A153F61225B037A3009E9AC0 /* XIOSPlayer */ = {
 			isa = PBXGroup;
 			children = (
+				A135663925B2AAB20090D017 /* douyin_700x1240.mp4 */,
+				A135663325B2A9790090D017 /* Shaders */,
 				A153F61325B037A3009E9AC0 /* AppDelegate.h */,
 				A153F61425B037A3009E9AC0 /* AppDelegate.m */,
 				A153F61625B037A3009E9AC0 /* SceneDelegate.h */,
@@ -158,9 +174,12 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A135663625B2A9790090D017 /* Shader.fsh in Resources */,
+				A135663A25B2AAB20090D017 /* douyin_700x1240.mp4 in Resources */,
 				A153F62325B037A6009E9AC0 /* LaunchScreen.storyboard in Resources */,
 				A153F62025B037A5009E9AC0 /* Assets.xcassets in Resources */,
 				A153F61E25B037A3009E9AC0 /* Main.storyboard in Resources */,
+				A135663725B2A9790090D017 /* Shader.vsh in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

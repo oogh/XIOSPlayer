@@ -2,7 +2,7 @@
 //  XIOSView.mm
 //  XIOSPlayer
 //
-//  Created by Andy on 2021/1/14.
+//  Created by oogh on 2021/1/14.
 //
 
 #import "XIOSView.hpp"
@@ -47,8 +47,7 @@ static const GLfloat kColorConversion709[] = {
     1.793, -0.533,   0.0,
 };
 
-@interface XIOSView ()
-{
+@interface XIOSView () {
     // The pixel dimensions of the CAEAGLLayer.
     GLint _backingWidth;
     GLint _backingHeight;
@@ -78,15 +77,12 @@ static const GLfloat kColorConversion709[] = {
 
 @implementation XIOSView
 
-+ (Class)layerClass
-{
++ (Class)layerClass {
     return [CAEAGLLayer class];
 }
 
-- (id)initWithCoder:(NSCoder *)aDecoder
-{
-    if ((self = [super initWithCoder:aDecoder]))
-    {
+- (instancetype)initWithCoder:(NSCoder *)aDecoder {
+    if ((self = [super initWithCoder:aDecoder])) {
         // Use 2x scale factor on Retina displays.
         self.contentScaleFactor = [[UIScreen mainScreen] scale];
         
@@ -112,8 +108,7 @@ static const GLfloat kColorConversion709[] = {
 
 # pragma mark - OpenGL setup
 
-- (void)setupGL
-{
+- (void)setupGL {
     [EAGLContext setCurrentContext:_context];
     [self setupBuffers];
     [self loadShaders];
@@ -123,8 +118,8 @@ static const GLfloat kColorConversion709[] = {
     // 0 and 1 are the texture IDs of _lumaTexture and _chromaTexture respectively.
     glUniform1i(uniforms[UNIFORM_Y], 0);
     glUniform1i(uniforms[UNIFORM_UV], 1);
-    glUniform1f(uniforms[UNIFORM_LUMA_THRESHOLD], self.lumaThreshold);
-    glUniform1f(uniforms[UNIFORM_CHROMA_THRESHOLD], self.chromaThreshold);
+    glUniform1f(uniforms[UNIFORM_LUMA_THRESHOLD], 1.0f);
+    glUniform1f(uniforms[UNIFORM_CHROMA_THRESHOLD], 1.0f);
     glUniform1f(uniforms[UNIFORM_ROTATION_ANGLE], self.preferredRotation);
     glUniformMatrix3fv(uniforms[UNIFORM_COLOR_CONVERSION_MATRIX], 1, GL_FALSE, _preferredConversion);
     
@@ -140,8 +135,7 @@ static const GLfloat kColorConversion709[] = {
 
 #pragma mark - Utilities
 
-- (void)setupBuffers
-{
+- (void)setupBuffers {
     glDisable(GL_DEPTH_TEST);
     
     glEnableVertexAttribArray(ATTRIB_VERTEX);
@@ -166,8 +160,7 @@ static const GLfloat kColorConversion709[] = {
     }
 }
 
-- (void)cleanUpTextures
-{
+- (void)cleanUpTextures {
     if (_lumaTexture) {
         CFRelease(_lumaTexture);
         _lumaTexture = NULL;
@@ -193,8 +186,7 @@ static const GLfloat kColorConversion709[] = {
 
 #pragma mark - OpenGLES drawing
 
-- (void)displayPixelBuffer:(CVPixelBufferRef)pixelBuffer
-{
+- (void)displayPixelBuffer:(CVPixelBufferRef)pixelBuffer {
     CVReturn err;
     if (pixelBuffer != NULL) {
         int frameWidth = (int)CVPixelBufferGetWidth(pixelBuffer);
@@ -233,10 +225,10 @@ static const GLfloat kColorConversion709[] = {
                                                            pixelBuffer,
                                                            NULL,
                                                            GL_TEXTURE_2D,
-                                                           GL_RED_EXT,
+                                                           GL_LUMINANCE,
                                                            frameWidth,
                                                            frameHeight,
-                                                           GL_RED_EXT,
+                                                           GL_LUMINANCE,
                                                            GL_UNSIGNED_BYTE,
                                                            0,
                                                            &_lumaTexture);
@@ -257,10 +249,10 @@ static const GLfloat kColorConversion709[] = {
                                                            pixelBuffer,
                                                            NULL,
                                                            GL_TEXTURE_2D,
-                                                           GL_RG_EXT,
+                                                           GL_LUMINANCE_ALPHA,
                                                            frameWidth / 2,
                                                            frameHeight / 2,
-                                                           GL_RG_EXT,
+                                                           GL_LUMINANCE_ALPHA,
                                                            GL_UNSIGNED_BYTE,
                                                            1,
                                                            &_chromaTexture);
@@ -285,13 +277,14 @@ static const GLfloat kColorConversion709[] = {
     
     // Use shader program.
     glUseProgram(self.program);
-    glUniform1f(uniforms[UNIFORM_LUMA_THRESHOLD], self.lumaThreshold);
-    glUniform1f(uniforms[UNIFORM_CHROMA_THRESHOLD], self.chromaThreshold);
+    glUniform1f(uniforms[UNIFORM_LUMA_THRESHOLD], 1.0f);
+    glUniform1f(uniforms[UNIFORM_CHROMA_THRESHOLD], 1.0f);
     glUniform1f(uniforms[UNIFORM_ROTATION_ANGLE], self.preferredRotation);
     glUniformMatrix3fv(uniforms[UNIFORM_COLOR_CONVERSION_MATRIX], 1, GL_FALSE, _preferredConversion);
     
-    // Set up the quad vertices with respect to the orientation and aspect ratio of the video.
-    CGRect vertexSamplingRect = AVMakeRectWithAspectRatioInsideRect(self.presentationRect, self.layer.bounds);
+    // Set up the quad vertices with respect to the borientation and aspect ratio of the video.
+//    CGRect vertexSamplingRect = AVMakeRectWithAspectRatioInsideRect(self.presentationRect, self.layer.bounds);
+    CGRect vertexSamplingRect = self.layer.bounds;
     
     // Compute normalized quad coordinates to draw the frame into.
     CGSize normalizedSamplingSize = CGSizeMake(0.0, 0.0);
@@ -344,8 +337,7 @@ static const GLfloat kColorConversion709[] = {
 
 #pragma mark -  OpenGL ES 2 shader compilation
 
-- (BOOL)loadShaders
-{
+- (BOOL)loadShaders {
     GLuint vertShader, fragShader;
     NSURL *vertShaderURL, *fragShaderURL;
     
@@ -417,8 +409,7 @@ static const GLfloat kColorConversion709[] = {
     return YES;
 }
 
-- (BOOL)compileShader:(GLuint *)shader type:(GLenum)type URL:(NSURL *)URL
-{
+- (BOOL)compileShader:(GLuint *)shader type:(GLenum)type URL:(NSURL *)URL {
     NSError *error;
     NSString *sourceString = [[NSString alloc] initWithContentsOfURL:URL encoding:NSUTF8StringEncoding error:&error];
     if (sourceString == nil) {
@@ -434,17 +425,6 @@ static const GLfloat kColorConversion709[] = {
     glShaderSource(*shader, 1, &source, NULL);
     glCompileShader(*shader);
     
-#if defined(DEBUG)
-    GLint logLength;
-    glGetShaderiv(*shader, GL_INFO_LOG_LENGTH, &logLength);
-    if (logLength > 0) {
-        GLchar *log = (GLchar *)malloc(logLength);
-        glGetShaderInfoLog(*shader, logLength, &logLength, log);
-        NSLog(@"Shader compile log:\n%s", log);
-        free(log);
-    }
-#endif
-    
     glGetShaderiv(*shader, GL_COMPILE_STATUS, &status);
     if (status == 0) {
         glDeleteShader(*shader);
@@ -454,21 +434,9 @@ static const GLfloat kColorConversion709[] = {
     return YES;
 }
 
-- (BOOL)linkProgram:(GLuint)prog
-{
+- (BOOL)linkProgram:(GLuint)prog {
     GLint status;
     glLinkProgram(prog);
-    
-#if defined(DEBUG)
-    GLint logLength;
-    glGetProgramiv(prog, GL_INFO_LOG_LENGTH, &logLength);
-    if (logLength > 0) {
-        GLchar *log = (GLchar *)malloc(logLength);
-        glGetProgramInfoLog(prog, logLength, &logLength, log);
-        NSLog(@"Program link log:\n%s", log);
-        free(log);
-    }
-#endif
     
     glGetProgramiv(prog, GL_LINK_STATUS, &status);
     if (status == 0) {
@@ -478,8 +446,7 @@ static const GLfloat kColorConversion709[] = {
     return YES;
 }
 
-- (BOOL)validateProgram:(GLuint)prog
-{
+- (BOOL)validateProgram:(GLuint)prog {
     GLint logLength, status;
     
     glValidateProgram(prog);

@@ -9,7 +9,7 @@
 #ifndef XEXPORTER_XIMAGE_H
 #define XEXPORTER_XIMAGE_H
 
-#include <memory>
+#include <inttypes.h>
 
 enum ImageType {
     IMG_TYPE_UNKNOWN = -1,
