@@ -186,7 +186,7 @@ void err2string(OSStatus status);
     
     int _width;
     int _height;
-    std::list<XImage*> _imageList;
+    std::list<std::shared_ptr<XImage>> _imageList;
     std::mutex _mutex;
     std::condition_variable _producerCond;
     std::condition_variable _consumerCond;
@@ -245,7 +245,6 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
 }
 
 - (CVPixelBufferRef)getPixelBuffer:(CMTime)clock {
-    
     int ret;
     for (;;) {
         XImage image;
@@ -495,13 +494,12 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
 - (void)pushBack:(CVImageBufferRef)imageBuffer pts:(CMTime)pts duration:(CMTime)duration {
     
     if (imageBuffer) {
-        std::lock_guard<std::mutex> lock(_mutex);
-        auto image = new XImage();
-        CMSampleTimingInfo timeInfo = {pts, duration, kCMTimeInvalid};
-        
         OSStatus status;
+        CMSampleTimingInfo timeInfo = {pts, duration, kCMTimeInvalid};
         CMVideoFormatDescriptionRef formatDescription = nullptr;
-        status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault, imageBuffer, &formatDescription);
+        status = CMVideoFormatDescriptionCreateForImageBuffer(kCFAllocatorDefault,
+                                                              imageBuffer,
+                                                              &formatDescription);
         if (status != noErr) {
             err2string(status);
             return;
@@ -520,14 +518,17 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
             return;
         }
         
-        image->sampleBuffer = sampleBuffer;
+        auto image = std::make_shared<XImage>();
+        CMSampleBufferCreateCopy(kCFAllocatorDefault, sampleBuffer, &image->sampleBuffer);
+        CFRelease(sampleBuffer);
         image->pts = static_cast<long>(CMTimeGetSeconds(pts));
         image->duration = static_cast<long>(CMTimeGetSeconds(duration));
         
+        std::lock_guard<std::mutex> lock(_mutex);
         if (_imageList.size() <= 0) {
             _imageList.emplace_back(std::move(image));
         } else {
-            std::list<XImage*>::iterator iter;
+            std::list<std::shared_ptr<XImage>>::iterator iter;
             for (iter = _imageList.begin(); iter != _imageList.end(); ++iter) {
                 auto temp = *iter;
                 if (image->pts < temp->pts) {
@@ -536,7 +537,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
             }
             
             if (iter != _imageList.end()) {
-                _imageList.insert(iter, image);
+                _imageList.insert(iter, std::move(image));
             } else {
                 _imageList.emplace_back(std::move(image));
             }
