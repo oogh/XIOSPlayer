@@ -28,6 +28,7 @@
     
     _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(refreshDisplay)];
     [_displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+    [_displayLink setFrameInterval:5];
     [_displayLink setPaused:YES];
     
     NSString* filePath = [[NSBundle mainBundle] pathForResource:@"douyin_700x1240" ofType:@"mp4"];
@@ -43,6 +44,10 @@
     }
     
     [_displayLink setPaused:NO];
+}
+
+- (IBAction)onProgressChanged:(UISlider *)sender {
+    
 }
 
 - (void)refreshDisplay {

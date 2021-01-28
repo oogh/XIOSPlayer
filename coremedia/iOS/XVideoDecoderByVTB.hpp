@@ -17,7 +17,7 @@
 
 - (int)open;
 
-- (CVPixelBufferRef)getPixelBuffer:(CMTime)clock;
+- (CVPixelBufferRef)getPixelBuffer:(CMTime)time;
 
 @end
 

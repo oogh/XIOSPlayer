@@ -26,6 +26,9 @@
                                 <constraints>
                                     <constraint firstAttribute="height" constant="30" id="GxX-mz-wEN"/>
                                 </constraints>
+                                <connections>
+                                    <action selector="onProgressChanged:" destination="BYZ-38-t0r" eventType="valueChanged" id="i0b-K1-3XR"/>
+                                </connections>
                             </slider>
                             <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" distribution="fillEqually" spacing="20" translatesAutoresizingMaskIntoConstraints="NO" id="adr-4K-0sq">
                                 <rect key="frame" x="24" y="540" width="366" height="80"/>

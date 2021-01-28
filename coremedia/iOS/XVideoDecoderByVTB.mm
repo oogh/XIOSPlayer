@@ -525,7 +525,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
         image->duration = static_cast<long>(CMTimeGetSeconds(duration));
         
         if (_imageList.size() <= 0) {
-            _imageList.emplace_back(image);
+            _imageList.emplace_back(std::move(image));
         } else {
             std::list<XImage*>::iterator iter;
             for (iter = _imageList.begin(); iter != _imageList.end(); ++iter) {
@@ -538,7 +538,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
             if (iter != _imageList.end()) {
                 _imageList.insert(iter, image);
             } else {
-                _imageList.insert(_imageList.end(), std::move(image));
+                _imageList.emplace_back(std::move(image));
             }
         }
     }
