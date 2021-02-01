@@ -28,7 +28,11 @@
     
     _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(refreshDisplay)];
     [_displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
-    [_displayLink setFrameInterval:5];
+    if (@available(iOS 10.0, *)) {
+        _displayLink.preferredFramesPerSecond = 60;
+    } else {
+        // Fallback on earlier versions
+    }
     [_displayLink setPaused:YES];
     
     NSString* filePath = [[NSBundle mainBundle] pathForResource:@"douyin_700x1240" ofType:@"mp4"];
@@ -51,8 +55,7 @@
 }
 
 - (void)refreshDisplay {
-    CMTime clock = CMTimeMake(self->clock, NSEC_PER_SEC);
-    CVPixelBufferRef pixelBuffer = [_decoder getPixelBuffer:clock];
+    CVPixelBufferRef pixelBuffer = [_decoder getPixelBuffer:self->clock];
     if (pixelBuffer) {
         [self.displayView displayPixelBuffer:pixelBuffer];
         self->clock += 40;

@@ -186,15 +186,19 @@ void err2string(OSStatus status);
     
     int _width;
     int _height;
-    std::list<std::shared_ptr<XImage>> _imageList;
-    std::mutex _mutex;
-    std::condition_variable _producerCond;
-    std::condition_variable _consumerCond;
     
     int _reorderSize;
     bool _hasEnoughFrame;
     
     std::unique_ptr<TempPacket> _tempPkt;
+    
+    std::list<std::shared_ptr<XImage>> _imageList;
+    std::mutex _mutex;
+    std::condition_variable _producerCond;
+    std::condition_variable _consumerCond;
+    
+    std::shared_ptr<XImage> _lastImage;
+    long _lastClock;
 }
 
 @end
@@ -205,8 +209,9 @@ void err2string(OSStatus status);
 - (instancetype)initWithPath:(NSString*)path {
     if (self = [super init]) {
         _path = path;
-        _reorderSize = 4;
+        _reorderSize = 8;
         _hasEnoughFrame = false;
+        _lastClock = -1L;
     }
     return self;
 }
@@ -244,27 +249,70 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     [decoder pushBack:CVPixelBufferRetain(imageBuffer) pts:presentationTimeStamp duration:presentationDuration];
 }
 
-- (CVPixelBufferRef)getPixelBuffer:(CMTime)clock {
-    int ret;
-    for (;;) {
-        XImage image;
-        ret = [self receiveFrame:image];
-        if (ret < 0 && ret != -11) {
-            return nullptr;
-        }
-        
-        if (ret >= 0) {
+- (CVPixelBufferRef)getPixelBuffer:(long)clock {
+    if (clock == _lastClock) {
+        if (_lastImage) {
             CMSampleBufferRef sampleBuffer = nullptr;
-            CMSampleBufferCreateCopy(kCFAllocatorDefault, image.sampleBuffer, &sampleBuffer);
+            CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
             return CMSampleBufferGetImageBuffer(sampleBuffer);
         }
-        
+    }
+    _lastClock = clock;
+    if (_imageList.size() >= _reorderSize) {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto iter = _imageList.begin();
+        for (;;) {
+            auto prev = *iter;
+            if (clock < prev->pts) {
+                if (_lastImage &&
+                    _lastImage->pts <= clock &&
+                    clock < _lastImage->pts + _lastImage->duration) {
+                    CMSampleBufferRef sampleBuffer = nullptr;
+                    CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
+                    return CMSampleBufferGetImageBuffer(sampleBuffer);
+                } else {
+                    // TODO 执行seek，获取新的帧
+                }
+            } else if (prev->pts <= clock && clock < prev->pts + prev->duration) {
+                _lastImage = prev;
+                _imageList.erase(iter++);
+                CMSampleBufferRef sampleBuffer = nullptr;
+                CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
+                return CMSampleBufferGetImageBuffer(sampleBuffer);
+            } else {
+                _lastImage = prev;
+                _imageList.erase(iter++);
+                if (iter != _imageList.end()) {
+                    auto next = *iter;
+                    if (clock < next->pts) {
+                        CMSampleBufferRef sampleBuffer = nullptr;
+                        CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
+                        return CMSampleBufferGetImageBuffer(sampleBuffer);
+                    } else if (next->pts <= clock && clock < next->pts + next->duration) {
+                        _lastImage = next;
+                        _imageList.erase(iter++);
+                        CMSampleBufferRef sampleBuffer = nullptr;
+                        CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
+                        return CMSampleBufferGetImageBuffer(sampleBuffer);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    _lastImage = prev;
+                    CMSampleBufferRef sampleBuffer = nullptr;
+                    CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
+                    return CMSampleBufferGetImageBuffer(sampleBuffer);
+                }
+            }
+        }
+    } else {
+        int ret;
         if (_tempPkt) {
             ret = [self sendPacket:_tempPkt->data
-                                    size:_tempPkt->size
-                                     pts:static_cast<double>(_tempPkt->pts)
-                                     dts:static_cast<double>(_tempPkt->dts)
-                                duration:static_cast<double>(_tempPkt->duration)];
+                              size:_tempPkt->size
+                               pts:static_cast<double>(_tempPkt->pts)
+                               dts:static_cast<double>(_tempPkt->dts)
+                          duration:static_cast<double>(_tempPkt->duration)];
             if (ret >= 0) {
                 _tempPkt = nullptr;
             }
