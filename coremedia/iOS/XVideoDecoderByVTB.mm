@@ -308,7 +308,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     } else {
         int ret;
         if (_tempPkt) {
-            ret = [self sendPacket:_tempPkt->data
+            ret = [self decodeVideo:_tempPkt->data
                               size:_tempPkt->size
                                pts:static_cast<double>(_tempPkt->pts)
                                dts:static_cast<double>(_tempPkt->dts)
@@ -325,7 +325,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
             }
             if (pkt.data && pkt.stream_index == _videoIndex) {
                 av_packet_rescale_ts(&pkt, _formatCtx->streams[_videoIndex]->time_base, {1, 1000});
-                ret = [self sendPacket:pkt.data
+                ret = [self decodeVideo:pkt.data
                                   size:pkt.size
                                    pts:static_cast<double>(pkt.pts)
                                    dts:static_cast<double>(pkt.dts)
@@ -459,7 +459,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
 
 #pragma mark -- Private
 
-- (int)sendPacket:(uint8_t*)data size:(size_t)size pts:(double)pts dts:(double)dts duration:(double)duration {
+- (int)decodeVideo:(uint8_t*)data size:(size_t)size pts:(double)pts dts:(double)dts duration:(double)duration {
     
     {
         std::lock_guard<std::mutex> lock(_mutex);
