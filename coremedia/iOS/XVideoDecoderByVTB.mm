@@ -188,7 +188,7 @@ void err2string(OSStatus status);
     int _height;
     
     int _reorderSize;
-    bool _hasEnoughFrame;
+    bool _isDataReady;
     
     std::unique_ptr<TempPacket> _tempPkt;
     
@@ -209,9 +209,11 @@ void err2string(OSStatus status);
 - (instancetype)initWithPath:(NSString*)path {
     if (self = [super init]) {
         _path = path;
-        _reorderSize = 8;
-        _hasEnoughFrame = false;
+        _reorderSize = 9;
+        _isDataReady = false;
         _lastClock = -1L;
+        
+        
     }
     return self;
 }
@@ -246,6 +248,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     
     XVideoDecoderByVTB* decoder = (__bridge XVideoDecoderByVTB*)decompressionOutputRefCon;
     
+    NSLog(@"andy pts: %.2f", CMTimeGetSeconds(presentationTimeStamp));
     [decoder pushBack:CVPixelBufferRetain(imageBuffer) pts:presentationTimeStamp duration:presentationDuration];
 }
 
@@ -258,7 +261,17 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
         }
     }
     _lastClock = clock;
-    if (_imageList.size() >= _reorderSize) {
+    
+    if (_imageList.size() <= 0) {
+        _isDataReady = false;
+    }
+    
+    
+    if (_isDataReady || _imageList.size() >= _reorderSize) {
+        if (_imageList.size() == 1) {
+            _isDataReady = _isDataReady;
+        }
+        _isDataReady = true;
         std::lock_guard<std::mutex> lock(_mutex);
         auto iter = _imageList.begin();
         for (;;) {
@@ -299,6 +312,9 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
                     }
                 } else {
                     _lastImage = prev;
+                    if (_imageList.size() >= 1) {
+                        _imageList.erase(iter++);
+                    }
                     CMSampleBufferRef sampleBuffer = nullptr;
                     CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
                     return CMSampleBufferGetImageBuffer(sampleBuffer);
