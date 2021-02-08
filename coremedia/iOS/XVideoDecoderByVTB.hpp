@@ -11,11 +11,15 @@
 #import <Foundation/Foundation.h>
 #import <CoreMedia/CoreMedia.h>
 
+typedef void(^OnOpenBlock)(long duration);
+
 @interface XVideoDecoderByVTB : NSObject
 
 - (instancetype)initWithPath:(NSString*)path;
 
 - (int)open;
+
+- (long)getDuration;
 
 //- (CVPixelBufferRef)getPixelBuffer:(CMTime)time;
 

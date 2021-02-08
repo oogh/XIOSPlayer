@@ -26,10 +26,10 @@
     
     [self.displayView setupGL];
     
-    _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(refreshDisplay)];
+    _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(refreshDisplay:)];
     [_displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
     if (@available(iOS 10.0, *)) {
-        _displayLink.preferredFramesPerSecond = 60;
+//        _displayLink.preferredFramesPerSecond = 60;
     } else {
         // Fallback on earlier versions
     }
@@ -47,18 +47,27 @@
         return;
     }
     
+    self.slider.maximumValue = [_decoder getDuration];
+    
     [_displayLink setPaused:NO];
+    
+//    for (long clock = 0; clock < 352000; clock += 100) {
+//        CVPixelBufferRef pixelBuffer = [_decoder getPixelBuffer:clock];
+//        if (pixelBuffer) {
+//            [self.displayView displayPixelBuffer:pixelBuffer];
+//        }
+//    }
 }
 
 - (IBAction)onProgressChanged:(UISlider *)sender {
-    
+    self->clock = (long)sender.value;
 }
 
-- (void)refreshDisplay {
+- (void)refreshDisplay:(CADisplayLink*)link {
     CVPixelBufferRef pixelBuffer = [_decoder getPixelBuffer:self->clock];
     if (pixelBuffer) {
         [self.displayView displayPixelBuffer:pixelBuffer];
-        self->clock += 40;
+        self.slider.value = self->clock;
     }
 }
 

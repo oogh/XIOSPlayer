@@ -13,7 +13,8 @@
 #include <list>
 #include <mutex>
 
-#define PRINT_IMAGE_ALLOC 0
+#define PRINT_IMAGE_ALLOC_LOG 0
+#define PRINT_PLAY_LOG 0
 
 struct XImage {
     CMSampleBufferRef sampleBuffer = nullptr;
@@ -24,7 +25,7 @@ struct XImage {
     
     XImage() {
         imgId = ID_COUNTER++;
-#if PRINT_IMAGE_ALLOC
+#if PRINT_IMAGE_ALLOC_LOG
         NSLog(@"XImage() id: %d", imgId);
 #endif
     }
@@ -33,7 +34,7 @@ struct XImage {
         CMSampleBufferCreateCopy(kCFAllocatorDefault, that.sampleBuffer, &sampleBuffer);
         this->pts = that.pts;
         this->duration = that.duration;
-#if PRINT_IMAGE_ALLOC
+#if PRINT_IMAGE_ALLOC_LOG
         NSLog(@"XImage(const XImage& that) id: %d", imgId);
 #endif
     }
@@ -44,7 +45,7 @@ struct XImage {
             this->pts = that.pts;
             this->duration = that.duration;
         }
-#if PRINT_IMAGE_ALLOC
+#if PRINT_IMAGE_ALLOC_LOG
         NSLog(@"XImage& operator=(const XImage& that) id: %d", imgId);
 #endif
         return *this;
@@ -58,7 +59,7 @@ struct XImage {
         that.sampleBuffer = nullptr;
         that.pts = -1L;
         that.duration = 0L;
-#if PRINT_IMAGE_ALLOC
+#if PRINT_IMAGE_ALLOC_LOG
         NSLog(@"XImage(XImage&& that) id: %d", imgId);
 #endif
     }
@@ -73,7 +74,7 @@ struct XImage {
             that.pts = -1L;
             that.duration = 0L;
         }
-#if PRINT_IMAGE_ALLOC
+#if PRINT_IMAGE_ALLOC_LOG
         NSLog(@"XImage& operator=(XImage&& that) id: %d", imgId);
 #endif
         return *this;
@@ -86,7 +87,7 @@ struct XImage {
         }
         pts = -1L;
         duration = 0L;
-#if PRINT_IMAGE_ALLOC
+#if PRINT_IMAGE_ALLOC_LOG
         NSLog(@"~XImage() id: %d", imgId);
 #endif
     }
@@ -188,7 +189,6 @@ void err2string(OSStatus status);
     int _height;
     
     int _reorderSize;
-    bool _isDataReady;
     
     std::unique_ptr<TempPacket> _tempPkt;
     
@@ -199,6 +199,14 @@ void err2string(OSStatus status);
     
     std::shared_ptr<XImage> _lastImage;
     long _lastClock;
+    
+    std::shared_ptr<XImage> _tempImage;
+    
+    bool _ready;
+    bool _sorted;
+    long _prevMaxClock;
+    
+    long _duration;
 }
 
 @end
@@ -210,10 +218,13 @@ void err2string(OSStatus status);
     if (self = [super init]) {
         _path = path;
         _reorderSize = 9;
-        _isDataReady = false;
         _lastClock = -1L;
         
+        _ready = false;
+        _sorted = false;
+        _prevMaxClock = 0L;
         
+        _duration = 0L;
     }
     return self;
 }
@@ -247,8 +258,10 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     }
     
     XVideoDecoderByVTB* decoder = (__bridge XVideoDecoderByVTB*)decompressionOutputRefCon;
-    
+
+#if PRINT_IMAGE_ALLOC_LOG
     NSLog(@"andy pts: %.2f", CMTimeGetSeconds(presentationTimeStamp));
+#endif
     [decoder pushBack:CVPixelBufferRetain(imageBuffer) pts:presentationTimeStamp duration:presentationDuration];
 }
 
@@ -262,102 +275,75 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     }
     _lastClock = clock;
     
-    if (_imageList.size() <= 0) {
-        _isDataReady = false;
+    if (_ready) {
+        if (!_sorted) {
+            _imageList.sort([](std::shared_ptr<XImage> prev, std::shared_ptr<XImage> next) {
+                return prev->pts < next->pts;
+            });
+            _sorted = true;
+#if PRINT_PLAY_LOG
+            NSLog(@"andy -- image count: %lu --", _imageList.size());
+#endif
+        }
+        
+        auto image = std::move(_imageList.front());
+        _imageList.pop_front();
+        _lastImage = image;
+        
+        if (_imageList.empty()) {
+            _ready = false;
+            _sorted = false;
+        }
+        
+        CMSampleBufferRef sampleBuffer = nullptr;
+        CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
+#if PRINT_PLAY_LOG
+        NSLog(@"andy pts: %ld", image->pts);
+#endif
+        return CMSampleBufferGetImageBuffer(sampleBuffer);
     }
     
-    
-    if (_isDataReady || _imageList.size() >= _reorderSize) {
-        if (_imageList.size() == 1) {
-            _isDataReady = _isDataReady;
-        }
-        _isDataReady = true;
-        std::lock_guard<std::mutex> lock(_mutex);
-        auto iter = _imageList.begin();
-        for (;;) {
-            auto prev = *iter;
-            if (clock < prev->pts) {
-                if (_lastImage &&
-                    _lastImage->pts <= clock &&
-                    clock < _lastImage->pts + _lastImage->duration) {
-                    CMSampleBufferRef sampleBuffer = nullptr;
-                    CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
-                    return CMSampleBufferGetImageBuffer(sampleBuffer);
-                } else {
-                    // TODO 执行seek，获取新的帧
-                }
-            } else if (prev->pts <= clock && clock < prev->pts + prev->duration) {
-                _lastImage = prev;
-                _imageList.erase(iter++);
-                CMSampleBufferRef sampleBuffer = nullptr;
-                CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
-                return CMSampleBufferGetImageBuffer(sampleBuffer);
-            } else {
-                _lastImage = prev;
-                _imageList.erase(iter++);
-                if (iter != _imageList.end()) {
-                    auto next = *iter;
-                    if (clock < next->pts) {
-                        CMSampleBufferRef sampleBuffer = nullptr;
-                        CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
-                        return CMSampleBufferGetImageBuffer(sampleBuffer);
-                    } else if (next->pts <= clock && clock < next->pts + next->duration) {
-                        _lastImage = next;
-                        _imageList.erase(iter++);
-                        CMSampleBufferRef sampleBuffer = nullptr;
-                        CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
-                        return CMSampleBufferGetImageBuffer(sampleBuffer);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    _lastImage = prev;
-                    if (_imageList.size() >= 1) {
-                        _imageList.erase(iter++);
-                    }
-                    CMSampleBufferRef sampleBuffer = nullptr;
-                    CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
-                    return CMSampleBufferGetImageBuffer(sampleBuffer);
-                }
-            }
-        }
-    } else {
-        int ret;
-        if (_tempPkt) {
-            ret = [self decodeVideo:_tempPkt->data
-                              size:_tempPkt->size
-                               pts:static_cast<double>(_tempPkt->pts)
-                               dts:static_cast<double>(_tempPkt->dts)
-                          duration:static_cast<double>(_tempPkt->duration)];
-            if (ret >= 0) {
-                _tempPkt = nullptr;
-            }
+    if (!_ready) {
+        if (_tempImage) {
+            _imageList.emplace_back(std::move(_tempImage));
         } else {
-            AVPacket pkt;
-            ret = av_read_frame(_formatCtx.get(), &pkt);
-            if (ret < 0) {
-                NSLog(@"andy av_read_frame() failed: %s", av_err2str(ret));
-                return nullptr;
-            }
-            if (pkt.data && pkt.stream_index == _videoIndex) {
-                av_packet_rescale_ts(&pkt, _formatCtx->streams[_videoIndex]->time_base, {1, 1000});
-                ret = [self decodeVideo:pkt.data
-                                  size:pkt.size
-                                   pts:static_cast<double>(pkt.pts)
-                                   dts:static_cast<double>(pkt.dts)
-                              duration:static_cast<double>(pkt.duration)];
-                if (ret == -11) {
-                    _tempPkt = std::make_unique<TempPacket>(pkt.data,
-                                                            pkt.size,
-                                                            static_cast<double>(pkt.pts),
-                                                            static_cast<double>(pkt.dts),
-                                                            static_cast<double>(pkt.duration));
+            int ret;
+            if (_tempPkt) {
+                ret = [self decodeVideo:_tempPkt->data
+                                   size:_tempPkt->size
+                                    pts:static_cast<double>(_tempPkt->pts)
+                                    dts:static_cast<double>(_tempPkt->dts)
+                               duration:static_cast<double>(_tempPkt->duration)];
+                if (ret >= 0) {
+                    _tempPkt = nullptr;
                 }
+            } else {
+                AVPacket pkt;
+                ret = av_read_frame(_formatCtx.get(), &pkt);
+                if (ret < 0) {
+                    NSLog(@"andy av_read_frame() failed: %s", av_err2str(ret));
+                    return nullptr;
+                }
+                if (pkt.data && pkt.stream_index == _videoIndex) {
+                    av_packet_rescale_ts(&pkt, _formatCtx->streams[_videoIndex]->time_base, {1, 1000});
+                    ret = [self decodeVideo:pkt.data
+                                       size:pkt.size
+                                        pts:static_cast<double>(pkt.pts)
+                                        dts:static_cast<double>(pkt.dts)
+                                   duration:static_cast<double>(pkt.duration)];
+                    if (ret == -11) {
+                        _tempPkt = std::make_unique<TempPacket>(pkt.data,
+                                                                pkt.size,
+                                                                static_cast<double>(pkt.pts),
+                                                                static_cast<double>(pkt.dts),
+                                                                static_cast<double>(pkt.duration));
+                    }
+                }
+                av_packet_unref(&pkt);
             }
-            av_packet_unref(&pkt);
         }
+        
     }
-    
     return nullptr;
 }
 
@@ -385,6 +371,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     }
     
     AVStream* st = ic->streams[_videoIndex];
+    _duration = static_cast<long>(av_rescale_q(st->duration, st->time_base, {1, 1000}));
     AVCodecParameters* codecpar = st->codecpar;
     
     int spsIndex = 0;
@@ -470,6 +457,10 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
         return status;
     }
     return 0;
+}
+
+- (long)getDuration {
+    return _duration;
 }
 
 
@@ -589,19 +580,14 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
         image->duration = static_cast<long>(CMTimeGetSeconds(duration));
         
         std::lock_guard<std::mutex> lock(_mutex);
-        if (_imageList.size() <= 0) {
+        if (_imageList.empty()) {
             _imageList.emplace_back(std::move(image));
+            _prevMaxClock = static_cast<long>(CMTimeGetSeconds(pts));
         } else {
-            std::list<std::shared_ptr<XImage>>::iterator iter;
-            for (iter = _imageList.begin(); iter != _imageList.end(); ++iter) {
-                auto temp = *iter;
-                if (image->pts < temp->pts) {
-                    break;
-                }
-            }
-            
-            if (iter != _imageList.end()) {
-                _imageList.insert(iter, std::move(image));
+            if (image->pts > _prevMaxClock) {
+                _ready = true;
+                _tempImage = image;
+                _prevMaxClock = image->pts;
             } else {
                 _imageList.emplace_back(std::move(image));
             }
