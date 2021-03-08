@@ -374,22 +374,44 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     _duration = static_cast<long>(av_rescale_q(st->duration, st->time_base, {1, 1000}));
     AVCodecParameters* codecpar = st->codecpar;
     
+    int vpsIndex = 0;
     int spsIndex = 0;
     int ppsIndex = 0;
+    size_t vpsLength = 0;
     size_t spsLength = 0;
     size_t ppsLength = 0;
     
-    for (int i = 2; i < codecpar->extradata_size; ++i) {
-        if (codecpar->extradata[i] == 0x67
-            && codecpar->extradata[i - 2] == 0x00) {
-            spsIndex = i;
-            spsLength = codecpar->extradata[i - 1];
-        }
-        
-        if (codecpar->extradata[i] == 0x68
-            && codecpar->extradata[i - 2] == 0x00) {
-            ppsIndex = i;
-            ppsLength = codecpar->extradata[i - 1];
+    if (codecpar->codec_id == AV_CODEC_ID_H264) {
+        spsIndex = 8;
+        spsLength = static_cast<size_t>(codecpar->extradata[spsIndex - 2] + codecpar->extradata[spsIndex - 1]);
+
+        ppsIndex = static_cast<int>(spsIndex + spsLength + 2 + 1);
+        ppsLength = static_cast<size_t>(codecpar->extradata[ppsIndex - 2] + codecpar->extradata[ppsIndex - 1]);
+    } else if (codecpar->codec_id == AV_CODEC_ID_HEVC) {
+        int i = 23;
+        for (;;) {
+            if (vpsIndex > 0 && spsIndex > 0 && ppsIndex > 0) {
+                break;
+            }
+            switch (codecpar->extradata[i] & 0x3F) {
+                case 32: {
+                    vpsIndex = i + 5;
+                    vpsLength = static_cast<size_t>(codecpar->extradata[vpsIndex - 2] + codecpar->extradata[vpsIndex - 1]);
+                    i = static_cast<int>(vpsIndex + vpsLength);
+                } break;
+                case 33: {
+                    spsIndex = i + 5;
+                    spsLength = static_cast<size_t>(codecpar->extradata[spsIndex - 2] + codecpar->extradata[spsIndex - 1]);
+                    i = static_cast<int>(spsIndex + spsLength);
+                } break;
+                case 34: {
+                    ppsIndex = i + 5;
+                    ppsLength = static_cast<size_t>(codecpar->extradata[ppsIndex - 2] + codecpar->extradata[ppsIndex - 1]);
+                    i = static_cast<int>(ppsIndex + ppsLength);
+                } break;
+                default:
+                    break;
+            }
         }
     }
     
@@ -398,13 +420,20 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     uint8_t* pps = new uint8_t[ppsLength];
     memcpy(pps, &codecpar->extradata[ppsIndex], ppsLength);
     
-    [self setupVideoFormatDescription:sps spsLength:spsLength pps:pps ppsLength:ppsLength];
+    if (vpsLength > 0) {
+        uint8_t* vps = new uint8_t[vpsLength];
+        memcpy(vps, &codecpar->extradata[vpsIndex], vpsLength);
+        [self setupHEVCVideoFormatDescription:vps vpsLength:vpsLength sps:sps spsLength:spsLength pps:pps ppsLength:ppsLength];
+    } else {
+        [self setupH264VideoFormatDescription:sps spsLength:spsLength pps:pps ppsLength:ppsLength];
+    }
+    
     [self setupVideoToolBox];
     
     return 0;
 }
 
-- (int)setupVideoFormatDescription:(uint8_t*)sps
+- (int)setupH264VideoFormatDescription:(uint8_t*)sps
                          spsLength:(size_t)spsLength
                                pps:(uint8_t*)pps
                          ppsLength:(size_t)ppsLength {
@@ -420,6 +449,37 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
                                                                  parameterSetSizes,
                                                                  NALUnitHeaderLength,
                                                                  &videoFormatDescription);
+    if (status != noErr) {
+        err2string(status);
+        return status;
+    }
+    
+    return 0;
+}
+
+- (int)setupHEVCVideoFormatDescription:(uint8_t*)vps
+                             vpsLength:(size_t)vpsLength
+                                   sps:(uint8_t*)sps
+                             spsLength:(size_t)spsLength
+                               pps:(uint8_t*)pps
+                         ppsLength:(size_t)ppsLength {
+    OSStatus status = 0;
+    size_t parameterSetCount = 3;
+    const uint8_t* parameterSetPointers[3] = {vps, sps, pps};
+    size_t parameterSetSizes[3] = {vpsLength, spsLength, ppsLength};
+    int NALUnitHeaderLength = 4;
+    
+    if (@available(iOS 11.0, *)) {
+        status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(kCFAllocatorDefault,
+                                                                     parameterSetCount,
+                                                                     parameterSetPointers,
+                                                                     parameterSetSizes,
+                                                                     NALUnitHeaderLength,
+                                                                     nullptr,
+                                                                     &videoFormatDescription);
+    } else {
+        // Fallback on earlier versions
+    }
     if (status != noErr) {
         err2string(status);
         return status;

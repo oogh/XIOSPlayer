@@ -26,16 +26,21 @@
     
     [self.displayView setupGL];
     
-    _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(refreshDisplay:)];
-    [_displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
-    if (@available(iOS 10.0, *)) {
-//        _displayLink.preferredFramesPerSecond = 60;
-    } else {
-        // Fallback on earlier versions
-    }
-    [_displayLink setPaused:YES];
+//    _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(refreshDisplay:)];
+//    [_displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+//    if (@available(iOS 10.0, *)) {
+////        _displayLink.preferredFramesPerSecond = 60;
+//    } else {
+//        // Fallback on earlier versions
+//    }
+//    [_displayLink setPaused:YES];
     
     NSString* filePath = [[NSBundle mainBundle] pathForResource:@"douyin_700x1240" ofType:@"mp4"];
+//    NSString* filePath = [[NSBundle mainBundle] pathForResource:@"xsmax_heiping" ofType:@"mp4"];
+//    NSString* filePath = [[NSBundle mainBundle] pathForResource:@"4k_1" ofType:@"mp4"];
+//    NSString* filePath = [[NSBundle mainBundle] pathForResource:@"4k" ofType:@"mp4"];
+//    NSString* filePath = [[NSBundle mainBundle] pathForResource:@"IMG_5685" ofType:@"MOV"];
+//    NSString* filePath = [[NSBundle mainBundle] pathForResource:@"kadun" ofType:@"mp4"];
     _decoder = [[XVideoDecoderByVTB alloc] initWithPath:filePath];
     
     self->clock = 0;
@@ -49,18 +54,20 @@
     
     self.slider.maximumValue = [_decoder getDuration];
     
-    [_displayLink setPaused:NO];
+//    [_displayLink setPaused:NO];
     
-//    for (long clock = 0; clock < 352000; clock += 100) {
-//        CVPixelBufferRef pixelBuffer = [_decoder getPixelBuffer:clock];
-//        if (pixelBuffer) {
-//            [self.displayView displayPixelBuffer:pixelBuffer];
-//        }
-//    }
+    for (long clock = 0; clock < 352000; clock += 100) {
+        CVPixelBufferRef pixelBuffer = [_decoder getPixelBuffer:clock];
+        if (pixelBuffer) {
+            [self.displayView displayPixelBuffer:pixelBuffer];
+            CVPixelBufferRelease(pixelBuffer);
+        }
+    }
 }
 
 - (IBAction)onProgressChanged:(UISlider *)sender {
     self->clock = (long)sender.value;
+    [_decoder seekTo:self->clock];
 }
 
 - (void)refreshDisplay:(CADisplayLink*)link {

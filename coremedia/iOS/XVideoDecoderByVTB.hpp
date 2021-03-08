@@ -21,9 +21,11 @@ typedef void(^OnOpenBlock)(long duration);
 
 - (long)getDuration;
 
-//- (CVPixelBufferRef)getPixelBuffer:(CMTime)time;
+- (int)seekTo:(long)clock;
 
 - (CVPixelBufferRef)getPixelBuffer:(long)clock;
+
+- (CVPixelBufferRef)getImage:(long)clock;
 
 @end
 
