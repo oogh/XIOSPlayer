@@ -207,6 +207,14 @@ void err2string(OSStatus status);
     long _prevMaxClock;
     
     long _duration;
+    
+    CFAbsoluteTime _lastTime;
+    
+    int _count;
+    bool _seekReq;
+    
+    CFAbsoluteTime _totalTime;
+    bool _eof;
 }
 
 @end
@@ -225,6 +233,11 @@ void err2string(OSStatus status);
         _prevMaxClock = 0L;
         
         _duration = 0L;
+        _count = 0;
+        
+        _seekReq = false;
+        _totalTime = 0.0f;
+        _eof = false;
     }
     return self;
 }
@@ -252,17 +265,150 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
                                  CVImageBufferRef imageBuffer,
                                  CMTime presentationTimeStamp,
                                  CMTime presentationDuration) {
+    XVideoDecoderByVTB* decoder = (__bridge XVideoDecoderByVTB*)decompressionOutputRefCon;
     if (status != noErr) {
+//        if (status == kVTVideoDecoderBadDataErr) {
+//            [decoder resetVTDecompressionSession];
+//        }
         err2string(status);
         return;
     }
-    
-    XVideoDecoderByVTB* decoder = (__bridge XVideoDecoderByVTB*)decompressionOutputRefCon;
+    CFAbsoluteTime d = CFAbsoluteTimeGetCurrent() - decoder->_lastTime;
+    if (d < 1000) {
+        decoder->_totalTime += d;
+        decoder->_count++;
+    }
+    if (!decoder->_eof) {
+        NSLog(@"andy callback 耗时: %f, count: %d", d * 1000.0, decoder->_count);
+    }
+    decoder->_lastTime = CFAbsoluteTimeGetCurrent();
 
 #if PRINT_IMAGE_ALLOC_LOG
     NSLog(@"andy pts: %.2f", CMTimeGetSeconds(presentationTimeStamp));
 #endif
     [decoder pushBack:CVPixelBufferRetain(imageBuffer) pts:presentationTimeStamp duration:presentationDuration];
+}
+
+- (int)decodeVideoFrame {
+    int ret;
+    
+    do {
+        if (_tempPkt) {
+            ret = [self decodeVideo:_tempPkt->data
+                               size:_tempPkt->size
+                                pts:static_cast<double>(_tempPkt->pts)
+                                dts:static_cast<double>(_tempPkt->dts)
+                           duration:static_cast<double>(_tempPkt->duration)];
+            if (ret >= 0) {
+                _tempPkt = nullptr;
+            }
+        } else {
+            AVPacket pkt;
+            ret = av_read_frame(_formatCtx.get(), &pkt);
+            if (ret < 0) {
+                _eof = true;
+                NSLog(@"andy av_read_frame() failed: %s", av_err2str(ret));
+                NSLog(@"andy 总耗时: %f 总次数: %d 平均耗时: %f", _totalTime * 1000, _count, (_totalTime * 1.0 / _count) * 1000);
+                return ret;
+            }
+            if (pkt.data && pkt.stream_index == _videoIndex) {
+                av_packet_rescale_ts(&pkt, _formatCtx->streams[_videoIndex]->time_base, {1, 1000});
+                ret = [self decodeVideo:pkt.data
+                                   size:pkt.size
+                                    pts:static_cast<double>(pkt.pts)
+                                    dts:static_cast<double>(pkt.dts)
+                               duration:static_cast<double>(pkt.duration)];
+                if (ret == -11) {
+                    _tempPkt = std::make_unique<TempPacket>(pkt.data,
+                                                            pkt.size,
+                                                            static_cast<double>(pkt.pts),
+                                                            static_cast<double>(pkt.dts),
+                                                            static_cast<double>(pkt.duration));
+                }
+            }
+            av_packet_unref(&pkt);
+        }
+    } while (ret != AVERROR_EOF);
+    
+    return 0;
+}
+
+- (CVPixelBufferRef)seekToTime:(long)clock {
+    if (_seekReq) {
+        return nullptr;
+    }
+    
+    _seekReq = true;
+    
+    if (clock == _lastClock) {
+        if (_lastImage) {
+            CMSampleBufferRef sampleBuffer = nullptr;
+            CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
+            _seekReq = false;
+            return CMSampleBufferGetImageBuffer(sampleBuffer);
+        }
+    }
+    
+    if (clock < _lastClock) {
+        int64_t time = av_rescale(clock, AV_TIME_BASE, 1000);
+        int ret = avformat_seek_file(_formatCtx.get(), -1, INT64_MIN, time, INT64_MAX, 0);
+        if (ret < 0) {
+            return nullptr;
+        }
+    }
+    
+    _lastClock = clock;
+    
+    for (;;) {
+        if (_imageList.empty()) {
+            int ret;
+            if (_tempPkt) {
+                ret = [self decodeVideo:_tempPkt->data
+                                   size:_tempPkt->size
+                                    pts:static_cast<double>(_tempPkt->pts)
+                                    dts:static_cast<double>(_tempPkt->dts)
+                               duration:static_cast<double>(_tempPkt->duration)];
+                if (ret >= 0) {
+                    _tempPkt = nullptr;
+                }
+            } else {
+                AVPacket pkt;
+                ret = av_read_frame(_formatCtx.get(), &pkt);
+                if (ret < 0) {
+                    NSLog(@"andy av_read_frame() failed: %s", av_err2str(ret));
+                    return nullptr;
+                }
+                if (pkt.data && pkt.stream_index == _videoIndex) {
+                    av_packet_rescale_ts(&pkt, _formatCtx->streams[_videoIndex]->time_base, {1, 1000});
+                    ret = [self decodeVideo:pkt.data
+                                       size:pkt.size
+                                        pts:static_cast<double>(pkt.pts)
+                                        dts:static_cast<double>(pkt.dts)
+                                   duration:static_cast<double>(pkt.duration)];
+                    if (ret == -11) {
+                        _tempPkt = std::make_unique<TempPacket>(pkt.data,
+                                                                pkt.size,
+                                                                static_cast<double>(pkt.pts),
+                                                                static_cast<double>(pkt.dts),
+                                                                static_cast<double>(pkt.duration));
+                    }
+                }
+                av_packet_unref(&pkt);
+            }
+        } else {
+            auto image = std::move(_imageList.front());
+            _imageList.pop_front();
+            if (image->pts <= clock && clock <= image->pts + image->duration) {
+                _lastImage = image;
+                CMSampleBufferRef sampleBuffer = nullptr;
+                CMSampleBufferCreateCopy(kCFAllocatorDefault, _lastImage->sampleBuffer, &sampleBuffer);
+                _seekReq = false;
+                return CMSampleBufferGetImageBuffer(sampleBuffer);
+            }
+        }
+    }
+    
+    return nil;
 }
 
 - (CVPixelBufferRef)getPixelBuffer:(long)clock {
@@ -428,7 +574,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
         [self setupH264VideoFormatDescription:sps spsLength:spsLength pps:pps ppsLength:ppsLength];
     }
     
-    [self setupVideoToolBox];
+    [self createVTDecompressionSession];
     
     return 0;
 }
@@ -488,7 +634,7 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     return 0;
 }
 
-- (int)setupVideoToolBox {
+- (int)createVTDecompressionSession {
     CFDictionaryRef videoDecoderSpecification = nullptr;
     
     CMVideoDimensions dimensions = CMVideoFormatDescriptionGetDimensions(videoFormatDescription);
@@ -519,6 +665,18 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
     return 0;
 }
 
+- (void)destroyVTDecompressionSession {
+    if (decompressionSession != nil) {
+        VTDecompressionSessionInvalidate(decompressionSession);
+        CFRelease(decompressionSession);
+    }
+}
+
+- (int)resetVTDecompressionSession {
+    [self destroyVTDecompressionSession];
+    return [self createVTDecompressionSession];
+}
+
 - (long)getDuration {
     return _duration;
 }
@@ -528,12 +686,12 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
 
 - (int)decodeVideo:(uint8_t*)data size:(size_t)size pts:(double)pts dts:(double)dts duration:(double)duration {
     
-    {
-        std::lock_guard<std::mutex> lock(_mutex);
-        if (_imageList.size() >= _reorderSize) {
-            return -11;
-        }
-    }
+//    {
+//        std::lock_guard<std::mutex> lock(_mutex);
+//        if (_imageList.size() >= _reorderSize) {
+//            return -11;
+//        }
+//    }
 
     CMBlockBufferRef blockBuffer = nullptr;
     OSStatus status;
@@ -640,18 +798,20 @@ void decompressionOutputCallback(void *decompressionOutputRefCon,
         image->duration = static_cast<long>(CMTimeGetSeconds(duration));
         
         std::lock_guard<std::mutex> lock(_mutex);
-        if (_imageList.empty()) {
-            _imageList.emplace_back(std::move(image));
-            _prevMaxClock = static_cast<long>(CMTimeGetSeconds(pts));
-        } else {
-            if (image->pts > _prevMaxClock) {
-                _ready = true;
-                _tempImage = image;
-                _prevMaxClock = image->pts;
-            } else {
-                _imageList.emplace_back(std::move(image));
-            }
-        }
+//        NSLog(@"andy pushback pts: %ld", image->pts);
+        _imageList.emplace_back(std::move(image));
+//        if (_imageList.empty()) {
+//            _imageList.emplace_back(std::move(image));
+//            _prevMaxClock = static_cast<long>(CMTimeGetSeconds(pts));
+//        } else {
+//            if (image->pts > _prevMaxClock) {
+//                _ready = true;
+//                _tempImage = image;
+//                _prevMaxClock = image->pts;
+//            } else {
+//                _imageList.emplace_back(std::move(image));
+//            }
+//        }
     }
 }
 
@@ -669,6 +829,14 @@ void err2string(OSStatus status) {
             
         case kCMSampleBufferError_RequiredParameterMissing:
             NSLog(@"Required Parameter Missing");
+            break;
+            
+        case kVTVideoDecoderBadDataErr:
+            NSLog(@"Video Decoder Bad Data");
+            break;
+            
+        case kVTInvalidSessionErr:
+            NSLog(@"Invalid VTDecompression Session");
             break;
             
         default:

@@ -21,11 +21,13 @@ typedef void(^OnOpenBlock)(long duration);
 
 - (long)getDuration;
 
-- (int)seekTo:(long)clock;
-
 - (CVPixelBufferRef)getPixelBuffer:(long)clock;
 
-- (CVPixelBufferRef)getImage:(long)clock;
+- (CVPixelBufferRef)seekToTime:(long)clock;
+
+- (int)decodeVideoFrame;
+
+- (int)resetVTDecompressionSession;
 
 @end
 
