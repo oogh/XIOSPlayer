@@ -188,29 +188,34 @@ static const GLfloat kColorConversion709[] = {
 
 - (void)displayPixelBuffer:(CVPixelBufferRef)pixelBuffer {
     CVReturn err;
+    CFAbsoluteTime s1, s2, s3, s4, s5, s6, s7, s8, s9, s10;
+    CFAbsoluteTime d1, d2, d3, d4, d5, d6, d7, d8, d9, d10;
     if (pixelBuffer != NULL) {
+        s1 = CFAbsoluteTimeGetCurrent();
         int frameWidth = (int)CVPixelBufferGetWidth(pixelBuffer);
         int frameHeight = (int)CVPixelBufferGetHeight(pixelBuffer);
+        d1 = CFAbsoluteTimeGetCurrent() - s1;
         
         if (!_videoTextureCache) {
             NSLog(@"No video texture cache");
             return;
         }
         
+        s2 = CFAbsoluteTimeGetCurrent();
         [self cleanUpTextures];
-        
+        d2 = CFAbsoluteTimeGetCurrent() - s2;
         
         /*
          Use the color attachment of the pixel buffer to determine the appropriate color conversion matrix.
          */
-        CFTypeRef colorAttachments = CVBufferGetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey, NULL);
-        
-        if (colorAttachments == kCVImageBufferYCbCrMatrix_ITU_R_601_4) {
-            _preferredConversion = kColorConversion601;
-        }
-        else {
-            _preferredConversion = kColorConversion709;
-        }
+//        CFTypeRef colorAttachments = CVBufferGetAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey, NULL);
+//
+//        if (colorAttachments == kCVImageBufferYCbCrMatrix_ITU_R_601_4) {
+//            _preferredConversion = kColorConversion601;
+//        }
+//        else {
+//            _preferredConversion = kColorConversion709;
+//        }
         
         /*
          CVOpenGLESTextureCacheCreateTextureFromImage will create GLES texture optimally from CVPixelBufferRef.
@@ -219,6 +224,8 @@ static const GLfloat kColorConversion709[] = {
         /*
          Create Y and UV textures from the pixel buffer. These textures will be drawn on the frame buffer Y-plane.
          */
+        
+        s3 = CFAbsoluteTimeGetCurrent();
         glActiveTexture(GL_TEXTURE0);
         err = CVOpenGLESTextureCacheCreateTextureFromImage(kCFAllocatorDefault,
                                                            _videoTextureCache,
@@ -235,13 +242,17 @@ static const GLfloat kColorConversion709[] = {
         if (err) {
             NSLog(@"Error at CVOpenGLESTextureCacheCreateTextureFromImage %d", err);
         }
+        d3 = CFAbsoluteTimeGetCurrent() - s3;
         
+        s4 = CFAbsoluteTimeGetCurrent();
         glBindTexture(CVOpenGLESTextureGetTarget(_lumaTexture), CVOpenGLESTextureGetName(_lumaTexture));
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        d4 = CFAbsoluteTimeGetCurrent() - s4;
         
+        s5 = CFAbsoluteTimeGetCurrent();
         // UV-plane.
         glActiveTexture(GL_TEXTURE1);
         err = CVOpenGLESTextureCacheCreateTextureFromImage(kCFAllocatorDefault,
@@ -259,21 +270,30 @@ static const GLfloat kColorConversion709[] = {
         if (err) {
             NSLog(@"Error at CVOpenGLESTextureCacheCreateTextureFromImage %d", err);
         }
+        d5 = CFAbsoluteTimeGetCurrent() - s5;
         
+        s6 = CFAbsoluteTimeGetCurrent();
         glBindTexture(CVOpenGLESTextureGetTarget(_chromaTexture), CVOpenGLESTextureGetName(_chromaTexture));
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        d6 = CFAbsoluteTimeGetCurrent() - s6;
         
+        s7 = CFAbsoluteTimeGetCurrent();
         glBindFramebuffer(GL_FRAMEBUFFER, _frameBufferHandle);
+        
         
         // Set the view port to the entire view.
         glViewport(0, 0, _backingWidth, _backingHeight);
+        d7 = CFAbsoluteTimeGetCurrent() - s7;
     }
     
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+   
+    s8 = CFAbsoluteTimeGetCurrent();
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    
     
     // Use shader program.
     glUseProgram(self.program);
@@ -281,9 +301,11 @@ static const GLfloat kColorConversion709[] = {
     glUniform1f(uniforms[UNIFORM_CHROMA_THRESHOLD], 1.0f);
     glUniform1f(uniforms[UNIFORM_ROTATION_ANGLE], self.preferredRotation);
     glUniformMatrix3fv(uniforms[UNIFORM_COLOR_CONVERSION_MATRIX], 1, GL_FALSE, _preferredConversion);
+    d8 = CFAbsoluteTimeGetCurrent() - s8;
     
     // Set up the quad vertices with respect to the borientation and aspect ratio of the video.
 //    CGRect vertexSamplingRect = AVMakeRectWithAspectRatioInsideRect(self.presentationRect, self.layer.bounds);
+    s9 = CFAbsoluteTimeGetCurrent();
     CGRect vertexSamplingRect = self.layer.bounds;
     
     // Compute normalized quad coordinates to draw the frame into.
@@ -328,11 +350,16 @@ static const GLfloat kColorConversion709[] = {
     
     glVertexAttribPointer(ATTRIB_TEXCOORD, 2, GL_FLOAT, 0, 0, quadTextureData);
     glEnableVertexAttribArray(ATTRIB_TEXCOORD);
+    d9 = CFAbsoluteTimeGetCurrent() - s9;
     
+    s10 = CFAbsoluteTimeGetCurrent();
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     
     glBindRenderbuffer(GL_RENDERBUFFER, _colorBufferHandle);
     [_context presentRenderbuffer:GL_RENDERBUFFER];
+    d10 = CFAbsoluteTimeGetCurrent() - s10;
+    NSLog(@"andy d1: %.2lf, d2: %.2lf, d3: %.2lf, d4: %.2lf, d5: %.2lf, d6: %.2lf, d7: %.2lf, d8: %.2lf, d9: %.2lf, d10: %.2lf",
+          d1 * 1000.0, d2 * 1000.0, d3 * 1000.0, d4 * 1000.0, d5 * 1000.0, d6 * 1000.0, d7 * 1000.0, d8 * 1000.0, d9 * 1000.0, d10 * 1000.0);
 }
 
 #pragma mark -  OpenGL ES 2 shader compilation
